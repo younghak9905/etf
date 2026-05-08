@@ -10,3 +10,4 @@
 - Updated Docker packaging for Cloud Run continuous deployment: `Dockerfile` now listens on `${PORT:-8080}` and `.dockerignore` excludes local-only files from the Cloud Build context.
 - Replaced Telegram notification settings with Discord Webhook notification via `DISCORD_WEBHOOK_URL`.
 - Created local ignored `.env` with non-secret Cloud Run runtime defaults for production testing.
+- Added a generated local `SCHEDULER_TOKEN` to the ignored `.env` file for Cloud Scheduler authentication.
