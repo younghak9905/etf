@@ -45,7 +45,7 @@ Important options:
 | `KIS_TOKEN_CACHE_BACKEND` | same as `STORAGE_BACKEND` | Use `firestore` in Cloud Run to share KIS access tokens across instances |
 | `ALERT_DRY_RUN` | `false` | Log Discord messages without sending |
 | `STORAGE_BACKEND` | `sqlite` | Use `firestore` for duplicate suppression across Cloud Run instances |
-| `US_WATCH_WINDOWS` | `17:00-00:00` | KST watch window for QLD |
+| `US_WATCH_WINDOWS` | `17:00-00:00` | KST watch window for QLD and SOXX |
 | `KR_WATCH_WINDOWS` | `09:00-10:00,11:30-13:00` | KST watch windows for Korean ETFs |
 
 For production Cloud Run, prefer `STORAGE_BACKEND=firestore` if duplicate suppression must survive cold starts and multiple instances. For lowest cost and single-instance operation, SQLite in `/tmp` is sufficient but not durable across instance replacement.

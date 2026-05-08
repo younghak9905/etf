@@ -23,3 +23,4 @@
 - Changed QLD's KIS exchange code from `NAS` to `AMS` because QLD is listed on NYSE Arca rather than Nasdaq.
 - Established the workflow that future development should be verified with Docker Desktop first, then pushed to GitHub after completion.
 - Added `POST /test-notification` to send a Discord webhook test message using the existing scheduler token authentication.
+- Added SOXX as a watched US ETF using KIS exchange code `NAS`.

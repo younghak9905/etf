@@ -48,6 +48,13 @@ class Settings:
                 kis_code="QLD",
             ),
             Instrument(
+                symbol="SOXX",
+                name="iShares Semiconductor ETF",
+                market=Market.US,
+                exchange="NAS",
+                kis_code="SOXX",
+            ),
+            Instrument(
                 symbol="133690",
                 name="TIGER 미국나스닥100",
                 market=Market.KR,
