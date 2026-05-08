@@ -14,3 +14,5 @@
 - Added a simple `/` HTML smoke-test page for Cloud Run browser verification.
 - Added `/health` as the Cloud Run-compatible health endpoint and kept `/healthz` only for local compatibility because Cloud Run can reserve paths ending in `z`.
 - Hardened KIS overseas quote parsing so QLD can fall back from missing `last` to alternate price fields and report available fields on normalization errors.
+- Added SQLite/Firestore KIS access token caching and 403 response body logging to reduce repeated `/oauth2/tokenP` calls across Cloud Run cold starts and revisions.
+- Documented that Firestore uses the Cloud Run service account and default project database through `google.cloud.firestore.AsyncClient()`.

@@ -9,6 +9,11 @@ import httpx
 
 from app.config.settings import Settings
 from app.models.market import Candle, Instrument, Market, MarketSnapshot
+from app.services.kis_token_cache import (
+    CachedKISToken,
+    build_kis_token_cache,
+    kis_token_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +23,8 @@ class KISClient:
         self._settings = settings
         self._access_token: str | None = None
         self._token_expires_at = datetime.min.replace(tzinfo=UTC)
+        self._token_cache = build_kis_token_cache(settings)
+        self._token_key = kis_token_key(settings.kis_base_url, settings.kis_app_key)
         self._client = httpx.AsyncClient(
             base_url=settings.kis_base_url,
             timeout=settings.request_timeout_seconds,
@@ -91,6 +98,12 @@ class KISClient:
         if self._access_token and now < self._token_expires_at:
             return self._access_token
 
+        cached = await self._cached_token(now)
+        if cached:
+            self._access_token = cached.access_token
+            self._token_expires_at = cached.expires_at
+            return cached.access_token
+
         response = await self._client.post(
             "/oauth2/tokenP",
             json={
@@ -100,7 +113,16 @@ class KISClient:
             },
             headers={"content-type": "application/json; charset=utf-8"},
         )
-        response.raise_for_status()
+        if response.status_code >= 400:
+            body = response.text[:1000]
+            logger.error(
+                "kis_token_request_failed",
+                extra={"status_code": response.status_code, "body": body},
+            )
+            raise RuntimeError(
+                f"KIS token request failed {response.status_code}: {body}"
+            )
+
         payload = response.json()
         token = payload.get("access_token")
         if not token:
@@ -111,7 +133,30 @@ class KISClient:
         self._token_expires_at = now + timedelta(
             seconds=max(60, expires_in - self._settings.kis_token_buffer_seconds)
         )
+        await self._store_token(
+            CachedKISToken(
+                access_token=self._access_token,
+                expires_at=self._token_expires_at,
+            )
+        )
         return token
+
+    async def _cached_token(self, now: datetime) -> CachedKISToken | None:
+        try:
+            cached = await self._token_cache.get(self._token_key)
+        except Exception as exc:
+            logger.warning("kis_token_cache_read_failed", extra={"error": str(exc)})
+            return None
+        if cached and now < cached.expires_at:
+            logger.info("kis_token_cache_hit")
+            return cached
+        return None
+
+    async def _store_token(self, token: CachedKISToken) -> None:
+        try:
+            await self._token_cache.set(self._token_key, token)
+        except Exception as exc:
+            logger.warning("kis_token_cache_write_failed", extra={"error": str(exc)})
 
     async def _domestic_quote(self, code: str) -> dict[str, float]:
         payload = await self._request(

@@ -23,6 +23,8 @@ class Settings:
     kis_app_key: str | None
     kis_app_secret: str | None
     kis_token_buffer_seconds: int
+    kis_token_cache_backend: str
+    kis_token_cache_collection: str
     request_timeout_seconds: float
     scheduler_token: str | None
     discord_webhook_url: str | None
@@ -73,6 +75,13 @@ class Settings:
             kis_app_key=os.getenv("KIS_APP_KEY"),
             kis_app_secret=os.getenv("KIS_APP_SECRET"),
             kis_token_buffer_seconds=int(os.getenv("KIS_TOKEN_BUFFER_SECONDS", "300")),
+            kis_token_cache_backend=os.getenv(
+                "KIS_TOKEN_CACHE_BACKEND",
+                os.getenv("STORAGE_BACKEND", "sqlite"),
+            ).lower(),
+            kis_token_cache_collection=os.getenv(
+                "KIS_TOKEN_CACHE_COLLECTION", "kis_access_tokens"
+            ),
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "7")),
             scheduler_token=os.getenv("SCHEDULER_TOKEN"),
             discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL"),

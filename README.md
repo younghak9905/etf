@@ -42,12 +42,17 @@ Important options:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MARKET_DATA_MODE` | `kis` | Use `mock` for local smoke tests without KIS credentials |
+| `KIS_TOKEN_CACHE_BACKEND` | same as `STORAGE_BACKEND` | Use `firestore` in Cloud Run to share KIS access tokens across instances |
 | `ALERT_DRY_RUN` | `false` | Log Discord messages without sending |
 | `STORAGE_BACKEND` | `sqlite` | Use `firestore` for duplicate suppression across Cloud Run instances |
 | `US_WATCH_WINDOWS` | `17:00-00:00` | KST watch window for QLD |
 | `KR_WATCH_WINDOWS` | `09:00-10:00,11:30-13:00` | KST watch windows for Korean ETFs |
 
 For production Cloud Run, prefer `STORAGE_BACKEND=firestore` if duplicate suppression must survive cold starts and multiple instances. For lowest cost and single-instance operation, SQLite in `/tmp` is sufficient but not durable across instance replacement.
+
+For KIS, prefer `KIS_TOKEN_CACHE_BACKEND=firestore` in Cloud Run. KIS access tokens are cached per App Key and base URL so cold starts and new revisions can reuse a valid token instead of calling `/oauth2/tokenP` every run.
+
+Firestore does not need a database URL in Cloud Run. The app uses `google.cloud.firestore.AsyncClient()`, which connects to the default Firestore database in the active GCP project through the Cloud Run service account. Create Firestore in Native mode and grant the Cloud Run service account `Cloud Datastore User`.
 
 ## Local Run
 
