@@ -7,3 +7,4 @@
 - Verified strategy and market-window tests with `C:\Users\yeong\AppData\Local\Programs\Python\Python311\python.exe -m unittest discover -s tests`.
 - Initialized a local git repository on branch `main` and prepared the first commit for GitHub publishing.
 - Connected `origin` to `https://github.com/younghak9905/etf.git` and pushed `main` to GitHub.
+- Updated Docker packaging for Cloud Run continuous deployment: `Dockerfile` now listens on `${PORT:-8080}` and `.dockerignore` excludes local-only files from the Cloud Build context.
