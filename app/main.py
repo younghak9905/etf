@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
 
 from app.config.settings import Settings
 from app.models.market import Signal
@@ -101,6 +102,97 @@ def get_engine(request: Request) -> SignalEngine:
 
 def get_notifier(request: Request) -> DiscordNotifier:
     return request.app.state.notifier
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root(settings: Settings = Depends(get_settings)) -> str:
+    return f"""
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>ETF Pullback Alert</title>
+        <style>
+          :root {{
+            color-scheme: light dark;
+            font-family: Arial, sans-serif;
+          }}
+          body {{
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #f6f7f9;
+            color: #171717;
+          }}
+          main {{
+            width: min(680px, calc(100% - 32px));
+            border: 1px solid #d9dde3;
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 28px;
+            box-sizing: border-box;
+          }}
+          h1 {{
+            margin: 0 0 12px;
+            font-size: 28px;
+            line-height: 1.2;
+          }}
+          p {{
+            margin: 8px 0;
+            line-height: 1.5;
+          }}
+          code {{
+            background: #eef1f5;
+            border-radius: 4px;
+            padding: 2px 6px;
+          }}
+          .status {{
+            display: inline-block;
+            margin: 12px 0 18px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #e7f7ed;
+            color: #116b34;
+            font-weight: 700;
+          }}
+          a {{
+            color: #155bd5;
+          }}
+          @media (prefers-color-scheme: dark) {{
+            body {{
+              background: #101214;
+              color: #f2f3f5;
+            }}
+            main {{
+              background: #181b1f;
+              border-color: #30363d;
+            }}
+            code {{
+              background: #252a31;
+            }}
+            .status {{
+              background: #163b24;
+              color: #7ee2a0;
+            }}
+            a {{
+              color: #8ab4ff;
+            }}
+          }}
+        </style>
+      </head>
+      <body>
+        <main>
+          <h1>ETF Pullback Alert System</h1>
+          <div class="status">Service is running</div>
+          <p>Environment: <code>{settings.app_env}</code></p>
+          <p>Health endpoint: <a href="/healthz">/healthz</a></p>
+          <p>Scheduler endpoint: <code>POST /run</code></p>
+        </main>
+      </body>
+    </html>
+    """
 
 
 @app.get("/healthz")

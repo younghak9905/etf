@@ -60,6 +60,12 @@ $env:ALERT_DRY_RUN="true"
 uvicorn app.main:app --reload --port 8080
 ```
 
+Open the root page for a browser smoke test:
+
+```text
+http://localhost:8080/
+```
+
 Trigger manually:
 
 ```powershell
