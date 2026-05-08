@@ -187,7 +187,7 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
           <h1>ETF Pullback Alert System</h1>
           <div class="status">Service is running</div>
           <p>Environment: <code>{settings.app_env}</code></p>
-          <p>Health endpoint: <a href="/healthz">/healthz</a></p>
+          <p>Health endpoint: <a href="/health">/health</a></p>
           <p>Scheduler endpoint: <code>POST /run</code></p>
         </main>
       </body>
@@ -197,6 +197,11 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
 
 @app.get("/healthz")
 async def healthz(settings: Settings = Depends(get_settings)) -> dict[str, str]:
+    return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/health")
+async def health(settings: Settings = Depends(get_settings)) -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
 
 

@@ -66,6 +66,12 @@ Open the root page for a browser smoke test:
 http://localhost:8080/
 ```
 
+Health check:
+
+```text
+http://localhost:8080/health
+```
+
 Trigger manually:
 
 ```powershell
@@ -131,5 +137,6 @@ python -m unittest discover -s tests
 ## Notes
 
 - KIS 국내 현재가 API는 `uapi/domestic-stock/v1/quotations/inquire-price`, 해외 현재가는 `uapi/overseas-price/v1/quotations/price`를 사용합니다.
+- Cloud Run에서는 `/healthz` 같은 일부 `z`로 끝나는 경로가 예약 경로와 충돌할 수 있으므로 외부 헬스체크는 `/health`를 사용합니다.
 - KIS 호출은 초당 제한을 고려해 동시성을 낮게 유지하고 실패 시 exponential backoff로 재시도합니다.
 - Cloud Run 비용 최소화를 위해 `min-instances=0`, `max-instances=1`을 기본 배포값으로 둡니다.

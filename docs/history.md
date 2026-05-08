@@ -12,3 +12,4 @@
 - Created local ignored `.env` with non-secret Cloud Run runtime defaults for production testing.
 - Added a generated local `SCHEDULER_TOKEN` to the ignored `.env` file for Cloud Scheduler authentication.
 - Added a simple `/` HTML smoke-test page for Cloud Run browser verification.
+- Added `/health` as the Cloud Run-compatible health endpoint and kept `/healthz` only for local compatibility because Cloud Run can reserve paths ending in `z`.
