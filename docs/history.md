@@ -19,3 +19,4 @@
 - Added a per-client token acquisition lock and overseas quote fallback to the latest daily candle when KIS returns empty `last`/`base` values.
 - Added Firestore configuration and connectivity status to the `/` smoke-test page.
 - Made KIS overseas daily parsing accept `output` as well as `output2` and report payload keys when daily rows are empty.
+- Set KIS overseas daily `BYMD` explicitly and expanded empty-row diagnostics with payload shapes.

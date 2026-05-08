@@ -11,7 +11,13 @@ sys.modules.setdefault(
 
 from datetime import date
 
-from app.clients.kis import _payload_rows, _quote_from_candles, _to_float, _to_str
+from app.clients.kis import (
+    _payload_rows,
+    _payload_summary,
+    _quote_from_candles,
+    _to_float,
+    _to_str,
+)
 from app.models.market import Candle
 
 
@@ -39,6 +45,15 @@ class KISNormalizationTest(TestCase):
 
     def test_payload_rows_accepts_output_alias(self) -> None:
         self.assertEqual(_payload_rows({"output": [{"xymd": "20260508"}]}, "output2", "output"), [{"xymd": "20260508"}])
+
+    def test_payload_rows_accepts_dict_alias(self) -> None:
+        self.assertEqual(_payload_rows({"output1": {"xymd": "20260508"}}, "output2", "output1"), [{"xymd": "20260508"}])
+
+    def test_payload_summary_includes_nested_shape(self) -> None:
+        self.assertIn(
+            "output2=list(len=0)",
+            _payload_summary({"output1": {"rsym": "DNASQLD"}, "output2": []}),
+        )
 
     def test_to_str_uses_first_available_alias(self) -> None:
         self.assertEqual(_to_str({"stck_bsop_date": "20260508"}, "xymd", "stck_bsop_date"), "20260508")
