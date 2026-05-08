@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 
 from app.config.settings import Settings
 from app.models.market import Signal
-from app.notification.telegram import TelegramNotifier
+from app.notification.discord import DiscordNotifier
 from app.scheduler.windows import is_market_window_open
 from app.services.market_data import MarketDataService, build_market_data_service
 from app.services.storage import AlertStorage, build_alert_storage
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = SignalEngine()
     app.state.market_data = build_market_data_service(settings)
     app.state.storage = build_alert_storage(settings)
-    app.state.notifier = TelegramNotifier(settings)
+    app.state.notifier = DiscordNotifier(settings)
     yield
     await app.state.market_data.close()
 
@@ -99,7 +99,7 @@ def get_engine(request: Request) -> SignalEngine:
     return request.app.state.engine
 
 
-def get_notifier(request: Request) -> TelegramNotifier:
+def get_notifier(request: Request) -> DiscordNotifier:
     return request.app.state.notifier
 
 
@@ -116,7 +116,7 @@ async def run_alert_cycle(
     market_data: MarketDataService = Depends(get_market_data),
     storage: AlertStorage = Depends(get_storage),
     engine: SignalEngine = Depends(get_engine),
-    notifier: TelegramNotifier = Depends(get_notifier),
+    notifier: DiscordNotifier = Depends(get_notifier),
 ) -> dict[str, Any]:
     _authorize(settings, x_scheduler_token, token)
     settings.validate_runtime()

@@ -25,8 +25,7 @@ class Settings:
     kis_token_buffer_seconds: int
     request_timeout_seconds: float
     scheduler_token: str | None
-    telegram_bot_token: str | None
-    telegram_chat_id: str | None
+    discord_webhook_url: str | None
     duplicate_window_minutes: int
     storage_backend: str
     sqlite_path: Path
@@ -76,8 +75,7 @@ class Settings:
             kis_token_buffer_seconds=int(os.getenv("KIS_TOKEN_BUFFER_SECONDS", "300")),
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "7")),
             scheduler_token=os.getenv("SCHEDULER_TOKEN"),
-            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN"),
-            telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID"),
+            discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL"),
             duplicate_window_minutes=int(os.getenv("DUPLICATE_WINDOW_MINUTES", "30")),
             storage_backend=os.getenv("STORAGE_BACKEND", "sqlite").lower(),
             sqlite_path=Path(os.getenv("SQLITE_PATH", "/tmp/etf_alerts.db")),
@@ -96,9 +94,7 @@ class Settings:
         ):
             raise ValueError("KIS_APP_KEY and KIS_APP_SECRET are required")
 
-        if not self.alert_dry_run and (
-            not self.telegram_bot_token or not self.telegram_chat_id
-        ):
+        if not self.alert_dry_run and not self.discord_webhook_url:
             raise ValueError(
-                "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required unless ALERT_DRY_RUN=true"
+                "DISCORD_WEBHOOK_URL is required unless ALERT_DRY_RUN=true"
             )

@@ -8,3 +8,4 @@
 - Initialized a local git repository on branch `main` and prepared the first commit for GitHub publishing.
 - Connected `origin` to `https://github.com/younghak9905/etf.git` and pushed `main` to GitHub.
 - Updated Docker packaging for Cloud Run continuous deployment: `Dockerfile` now listens on `${PORT:-8080}` and `.dockerignore` excludes local-only files from the Cloud Build context.
+- Replaced Telegram notification settings with Discord Webhook notification via `DISCORD_WEBHOOK_URL`.

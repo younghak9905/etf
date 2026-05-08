@@ -1,6 +1,6 @@
 # ETF Pullback Alert System
 
-QLD, TIGER 미국나스닥100(133690), KODEX 미국S&P500(379800)의 저점/눌림목 구간을 KIS Open API로 감시하고 Telegram으로 알림을 보내는 Cloud Run 서비스입니다. 목표는 자동매매가 아니라 장기 적립식 투자에서 상대적으로 유리한 매수 후보 구간을 알려주는 것입니다.
+QLD, TIGER 미국나스닥100(133690), KODEX 미국S&P500(379800)의 저점/눌림목 구간을 KIS Open API로 감시하고 Discord로 알림을 보내는 Cloud Run 서비스입니다. 목표는 자동매매가 아니라 장기 적립식 투자에서 상대적으로 유리한 매수 후보 구간을 알려주는 것입니다.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Cloud Scheduler
   -> KIS Open API
   -> Signal Engine
   -> SQLite or Firestore duplicate gate
-  -> Telegram Bot
+  -> Discord Webhook
 ```
 
 Cloud Scheduler는 1분마다 하나의 `/run` 엔드포인트만 호출합니다. 서비스 내부에서 한국/미국 감시 시간대를 검사하므로 Scheduler Job 수를 줄일 수 있습니다.
@@ -34,8 +34,7 @@ Copy `.env.example` and set secrets:
 KIS_APP_KEY=
 KIS_APP_SECRET=
 SCHEDULER_TOKEN=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
+DISCORD_WEBHOOK_URL=
 ```
 
 Important options:
@@ -43,7 +42,7 @@ Important options:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MARKET_DATA_MODE` | `kis` | Use `mock` for local smoke tests without KIS credentials |
-| `ALERT_DRY_RUN` | `false` | Log Telegram messages without sending |
+| `ALERT_DRY_RUN` | `false` | Log Discord messages without sending |
 | `STORAGE_BACKEND` | `sqlite` | Use `firestore` for duplicate suppression across Cloud Run instances |
 | `US_WATCH_WINDOWS` | `17:00-00:00` | KST watch window for QLD |
 | `KR_WATCH_WINDOWS` | `09:00-10:00,11:30-13:00` | KST watch windows for Korean ETFs |
@@ -102,7 +101,7 @@ Set runtime environment variables:
 gcloud run services update etf-pullback-alert `
   --region=asia-northeast3 `
   --set-env-vars APP_ENV=prod,MARKET_DATA_MODE=kis,STORAGE_BACKEND=firestore,ALERT_DRY_RUN=false `
-  --set-secrets KIS_APP_KEY=KIS_APP_KEY:latest,KIS_APP_SECRET=KIS_APP_SECRET:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,TELEGRAM_CHAT_ID=TELEGRAM_CHAT_ID:latest,SCHEDULER_TOKEN=SCHEDULER_TOKEN:latest
+  --set-secrets KIS_APP_KEY=KIS_APP_KEY:latest,KIS_APP_SECRET=KIS_APP_SECRET:latest,DISCORD_WEBHOOK_URL=DISCORD_WEBHOOK_URL:latest,SCHEDULER_TOKEN=SCHEDULER_TOKEN:latest
 ```
 
 Create the Scheduler job:
