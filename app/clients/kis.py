@@ -236,7 +236,7 @@ class KISClient:
                 "EXCD": exchange,
                 "SYMB": symbol,
                 "GUBN": "0",
-                "BYMD": "",
+                "BYMD": date.today().strftime("%Y%m%d"),
                 "MODP": "1",
             },
         )
@@ -277,8 +277,22 @@ def _payload_rows(payload: dict[str, Any], *keys: str) -> list[dict[str, Any]]:
         rows = payload.get(key)
         if isinstance(rows, list) and rows:
             return rows
-    available = ", ".join(sorted(payload.keys()))
-    raise RuntimeError(f"KIS daily rows are empty; available payload fields: {available}")
+        if isinstance(rows, dict) and rows:
+            return [rows]
+    raise RuntimeError(f"KIS daily rows are empty; {_payload_summary(payload)}")
+
+
+def _payload_summary(payload: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in sorted(payload.keys()):
+        value = payload[key]
+        if isinstance(value, list):
+            parts.append(f"{key}=list(len={len(value)})")
+        elif isinstance(value, dict):
+            parts.append(f"{key}=dict(keys={','.join(sorted(value.keys()))})")
+        else:
+            parts.append(f"{key}={str(value)[:80]}")
+    return "; ".join(parts)
 
 
 def _quote_from_candles(candles: list[Candle]) -> dict[str, float]:

@@ -13,7 +13,7 @@ class SignalEngineTest(TestCase):
             symbol="QLD",
             name="ProShares Ultra QQQ",
             market=Market.US,
-            exchange="NAS",
+            exchange="AMS",
             kis_code="QLD",
         )
         self.engine = SignalEngine()
