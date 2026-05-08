@@ -165,10 +165,12 @@ class KISClient:
         )
         output = payload["output"]
         return {
-            "current_price": _to_float(output, "last"),
-            "prev_close": _to_float(output, "base"),
-            "day_high": _to_float(output, "high"),
-            "day_low": _to_float(output, "low"),
+            "current_price": _to_float(
+                output, "last", "base", "clos", "close", "ovrs_nmix_prpr", "stck_prpr"
+            ),
+            "prev_close": _to_float(output, "base", "clos", "close", "last"),
+            "day_high": _to_float(output, "high", "hprc", "ovrs_nmix_hgpr"),
+            "day_low": _to_float(output, "low", "lprc", "ovrs_nmix_lwpr"),
             "volume": _to_float(output, "tvol", "evol"),
         }
 
@@ -204,7 +206,8 @@ def _to_float(payload: dict[str, Any], *keys: str) -> float:
         raw = payload.get(key)
         if raw not in {None, ""}:
             return float(str(raw).replace(",", ""))
-    raise KeyError(f"missing numeric field: {keys}")
+    available = ", ".join(sorted(payload.keys()))
+    raise KeyError(f"missing numeric field: {keys}; available fields: {available}")
 
 
 def _parse_date(raw: str) -> date:
