@@ -9,7 +9,10 @@ sys.modules.setdefault(
     types.SimpleNamespace(AsyncClient=object, HTTPError=Exception),
 )
 
-from app.clients.kis import _to_float
+from datetime import date
+
+from app.clients.kis import _quote_from_candles, _to_float
+from app.models.market import Candle
 
 
 class KISNormalizationTest(TestCase):
@@ -19,3 +22,17 @@ class KISNormalizationTest(TestCase):
     def test_to_float_raises_with_available_fields(self) -> None:
         with self.assertRaisesRegex(KeyError, "available fields: base"):
             _to_float({"base": "88.12"}, "last")
+
+    def test_quote_from_candles_uses_latest_daily_bar(self) -> None:
+        quote = _quote_from_candles(
+            [
+                Candle(date(2026, 5, 7), open=10, high=11, low=9, close=10.5, volume=100),
+                Candle(date(2026, 5, 8), open=11, high=12, low=10, close=11.5, volume=200),
+            ]
+        )
+
+        self.assertEqual(quote["current_price"], 11.5)
+        self.assertEqual(quote["prev_close"], 10.5)
+        self.assertEqual(quote["day_high"], 12)
+        self.assertEqual(quote["day_low"], 10)
+        self.assertEqual(quote["volume"], 200)

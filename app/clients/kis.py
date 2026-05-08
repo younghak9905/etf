@@ -23,6 +23,7 @@ class KISClient:
         self._settings = settings
         self._access_token: str | None = None
         self._token_expires_at = datetime.min.replace(tzinfo=UTC)
+        self._token_lock = asyncio.Lock()
         self._token_cache = build_kis_token_cache(settings)
         self._token_key = kis_token_key(settings.kis_base_url, settings.kis_app_key)
         self._client = httpx.AsyncClient(
@@ -41,10 +42,15 @@ class KISClient:
                 self._domestic_daily(instrument.kis_code),
             )
         else:
-            quote, candles = await asyncio.gather(
-                self._overseas_quote(instrument.exchange, instrument.kis_code),
-                self._overseas_daily(instrument.exchange, instrument.kis_code),
-            )
+            candles = await self._overseas_daily(instrument.exchange, instrument.kis_code)
+            try:
+                quote = await self._overseas_quote(instrument.exchange, instrument.kis_code)
+            except KeyError as exc:
+                logger.warning(
+                    "kis_overseas_quote_fallback_to_daily",
+                    extra={"symbol": instrument.symbol, "error": str(exc)},
+                )
+                quote = _quote_from_candles(candles)
 
         return MarketSnapshot(
             instrument=instrument,
@@ -94,52 +100,53 @@ class KISClient:
         raise RuntimeError(f"KIS request failed: {path}") from last_error
 
     async def _token(self) -> str:
-        now = datetime.now(UTC)
-        if self._access_token and now < self._token_expires_at:
-            return self._access_token
+        async with self._token_lock:
+            now = datetime.now(UTC)
+            if self._access_token and now < self._token_expires_at:
+                return self._access_token
 
-        cached = await self._cached_token(now)
-        if cached:
-            self._access_token = cached.access_token
-            self._token_expires_at = cached.expires_at
-            return cached.access_token
+            cached = await self._cached_token(now)
+            if cached:
+                self._access_token = cached.access_token
+                self._token_expires_at = cached.expires_at
+                return cached.access_token
 
-        response = await self._client.post(
-            "/oauth2/tokenP",
-            json={
-                "grant_type": "client_credentials",
-                "appkey": self._settings.kis_app_key,
-                "appsecret": self._settings.kis_app_secret,
-            },
-            headers={"content-type": "application/json; charset=utf-8"},
-        )
-        if response.status_code >= 400:
-            body = response.text[:1000]
-            logger.error(
-                "kis_token_request_failed",
-                extra={"status_code": response.status_code, "body": body},
+            response = await self._client.post(
+                "/oauth2/tokenP",
+                json={
+                    "grant_type": "client_credentials",
+                    "appkey": self._settings.kis_app_key,
+                    "appsecret": self._settings.kis_app_secret,
+                },
+                headers={"content-type": "application/json; charset=utf-8"},
             )
-            raise RuntimeError(
-                f"KIS token request failed {response.status_code}: {body}"
-            )
+            if response.status_code >= 400:
+                body = response.text[:1000]
+                logger.error(
+                    "kis_token_request_failed",
+                    extra={"status_code": response.status_code, "body": body},
+                )
+                raise RuntimeError(
+                    f"KIS token request failed {response.status_code}: {body}"
+                )
 
-        payload = response.json()
-        token = payload.get("access_token")
-        if not token:
-            raise RuntimeError("KIS token response did not include access_token")
+            payload = response.json()
+            token = payload.get("access_token")
+            if not token:
+                raise RuntimeError("KIS token response did not include access_token")
 
-        expires_in = int(payload.get("expires_in", 86400))
-        self._access_token = token
-        self._token_expires_at = now + timedelta(
-            seconds=max(60, expires_in - self._settings.kis_token_buffer_seconds)
-        )
-        await self._store_token(
-            CachedKISToken(
-                access_token=self._access_token,
-                expires_at=self._token_expires_at,
+            expires_in = int(payload.get("expires_in", 86400))
+            self._access_token = token
+            self._token_expires_at = now + timedelta(
+                seconds=max(60, expires_in - self._settings.kis_token_buffer_seconds)
             )
-        )
-        return token
+            await self._store_token(
+                CachedKISToken(
+                    access_token=self._access_token,
+                    expires_at=self._token_expires_at,
+                )
+            )
+            return token
 
     async def _cached_token(self, now: datetime) -> CachedKISToken | None:
         try:
@@ -253,6 +260,21 @@ def _to_float(payload: dict[str, Any], *keys: str) -> float:
             return float(str(raw).replace(",", ""))
     available = ", ".join(sorted(payload.keys()))
     raise KeyError(f"missing numeric field: {keys}; available fields: {available}")
+
+
+def _quote_from_candles(candles: list[Candle]) -> dict[str, float]:
+    if not candles:
+        raise RuntimeError("cannot build quote fallback without overseas candles")
+    ordered = sorted(candles, key=lambda candle: candle.trading_date)
+    latest = ordered[-1]
+    previous = ordered[-2] if len(ordered) >= 2 else latest
+    return {
+        "current_price": latest.close,
+        "prev_close": previous.close,
+        "day_high": latest.high,
+        "day_low": latest.low,
+        "volume": latest.volume,
+    }
 
 
 def _parse_date(raw: str) -> date:

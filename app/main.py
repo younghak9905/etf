@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import html
 import json
 import logging
 import os
@@ -106,6 +108,7 @@ def get_notifier(request: Request) -> DiscordNotifier:
 
 @app.get("/", response_class=HTMLResponse)
 async def root(settings: Settings = Depends(get_settings)) -> str:
+    firestore_status = await _firestore_status(settings)
     return f"""
     <!doctype html>
     <html lang="en">
@@ -157,6 +160,18 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
             color: #116b34;
             font-weight: 700;
           }}
+          dl {{
+            display: grid;
+            grid-template-columns: 160px 1fr;
+            gap: 8px 12px;
+            margin: 16px 0;
+          }}
+          dt {{
+            color: #5f6876;
+          }}
+          dd {{
+            margin: 0;
+          }}
           a {{
             color: #155bd5;
           }}
@@ -172,9 +187,12 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
             code {{
               background: #252a31;
             }}
-            .status {{
+          .status {{
               background: #163b24;
               color: #7ee2a0;
+            }}
+            dt {{
+              color: #a8b0bc;
             }}
             a {{
               color: #8ab4ff;
@@ -186,7 +204,16 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
         <main>
           <h1>ETF Pullback Alert System</h1>
           <div class="status">Service is running</div>
-          <p>Environment: <code>{settings.app_env}</code></p>
+          <dl>
+            <dt>Environment</dt>
+            <dd><code>{html.escape(settings.app_env)}</code></dd>
+            <dt>Storage backend</dt>
+            <dd><code>{html.escape(settings.storage_backend)}</code></dd>
+            <dt>KIS token cache</dt>
+            <dd><code>{html.escape(settings.kis_token_cache_backend)}</code></dd>
+            <dt>Firestore</dt>
+            <dd><code>{html.escape(firestore_status)}</code></dd>
+          </dl>
           <p>Health endpoint: <a href="/health">/health</a></p>
           <p>Scheduler endpoint: <code>POST /run</code></p>
         </main>
@@ -203,6 +230,25 @@ async def healthz(settings: Settings = Depends(get_settings)) -> dict[str, str]:
 @app.get("/health")
 async def health(settings: Settings = Depends(get_settings)) -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
+
+
+async def _firestore_status(settings: Settings) -> str:
+    uses_firestore = (
+        settings.storage_backend == "firestore"
+        or settings.kis_token_cache_backend == "firestore"
+    )
+    if not uses_firestore:
+        return "not configured"
+
+    try:
+        from google.cloud import firestore
+
+        client = firestore.AsyncClient()
+        query = client.collection(settings.firestore_collection).limit(1)
+        await asyncio.wait_for(query.get(), timeout=3)
+        return "connected"
+    except Exception as exc:
+        return f"error: {type(exc).__name__}: {str(exc)[:160]}"
 
 
 @app.post("/run")

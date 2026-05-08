@@ -71,6 +71,8 @@ Open the root page for a browser smoke test:
 http://localhost:8080/
 ```
 
+The root page also shows whether Firestore is configured and whether a short Firestore read check succeeds.
+
 Health check:
 
 ```text
