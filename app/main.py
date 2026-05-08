@@ -216,6 +216,7 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
           </dl>
           <p>Health endpoint: <a href="/health">/health</a></p>
           <p>Scheduler endpoint: <code>POST /run</code></p>
+          <p>Discord test endpoint: <code>POST /test-notification</code></p>
         </main>
       </body>
     </html>
@@ -308,6 +309,22 @@ async def run_alert_cycle(
         "sent": [_serialize_signal(signal) for signal in sent],
         "suppressed": [_serialize_signal(signal) for signal in suppressed],
         "errors": errors,
+    }
+
+
+@app.post("/test-notification")
+async def test_notification(
+    x_scheduler_token: str | None = Header(default=None),
+    token: str | None = Query(default=None),
+    settings: Settings = Depends(get_settings),
+    notifier: DiscordNotifier = Depends(get_notifier),
+) -> dict[str, Any]:
+    _authorize(settings, x_scheduler_token, token)
+    result = await notifier.send_test()
+    return {
+        "status": "ok",
+        "notification": result,
+        "dry_run": settings.alert_dry_run,
     }
 
 

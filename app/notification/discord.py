@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 import httpx
 
@@ -18,9 +19,24 @@ class DiscordNotifier:
 
     async def send(self, signal: Signal) -> None:
         payload = self._payload(signal)
+        await self._send_payload(payload)
+
+    async def send_test(self) -> str:
+        payload = {
+            "username": "ETF Pullback Alert",
+            "content": (
+                "**ETF Pullback Alert test notification**\n\n"
+                f"Status: `ok`\n"
+                f"Time: `{datetime.now(UTC).isoformat()}`\n\n"
+                "Discord webhook delivery is working."
+            ),
+        }
+        return await self._send_payload(payload)
+
+    async def _send_payload(self, payload: dict[str, object]) -> str:
         if self._dry_run:
             logger.info("discord_dry_run", extra={"message": payload["content"]})
-            return
+            return "dry_run"
 
         if not self._webhook_url:
             raise RuntimeError("discord webhook url is not configured")
@@ -28,6 +44,7 @@ class DiscordNotifier:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(self._webhook_url, json=payload)
             response.raise_for_status()
+        return "sent"
 
     @staticmethod
     def _payload(signal: Signal) -> dict[str, object]:

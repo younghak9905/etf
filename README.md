@@ -91,12 +91,27 @@ If `SCHEDULER_TOKEN` is set:
 Invoke-RestMethod -Method Post "http://localhost:8080/run" -Headers @{"X-Scheduler-Token"="change-me"}
 ```
 
+Test Discord webhook delivery without waiting for a signal:
+
+```powershell
+Invoke-RestMethod -Method Post "http://localhost:8080/test-notification" -Headers @{"X-Scheduler-Token"="change-me"}
+```
+
 ## Docker
 
 ```powershell
 docker build -t etf-pullback-alert .
 docker run --rm -p 8080:8080 --env-file .env etf-pullback-alert
 ```
+
+Development workflow:
+
+```powershell
+docker build -t etf-pullback-alert:dev .
+docker run --rm -p 8080:8080 --env-file .env etf-pullback-alert:dev
+```
+
+Use Docker Desktop as the default verification path before pushing completed work to GitHub.
 
 ## Deploy To Cloud Run
 

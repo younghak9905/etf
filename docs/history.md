@@ -21,3 +21,5 @@
 - Made KIS overseas daily parsing accept `output` as well as `output2` and report payload keys when daily rows are empty.
 - Set KIS overseas daily `BYMD` explicitly and expanded empty-row diagnostics with payload shapes.
 - Changed QLD's KIS exchange code from `NAS` to `AMS` because QLD is listed on NYSE Arca rather than Nasdaq.
+- Established the workflow that future development should be verified with Docker Desktop first, then pushed to GitHub after completion.
+- Added `POST /test-notification` to send a Discord webhook test message using the existing scheduler token authentication.
