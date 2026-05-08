@@ -240,16 +240,17 @@ class KISClient:
                 "MODP": "1",
             },
         )
+        rows = _payload_rows(payload, "output2", "output")
         return [
             Candle(
-                trading_date=_parse_date(item["xymd"]),
-                open=_to_float(item, "open"),
-                high=_to_float(item, "high"),
-                low=_to_float(item, "low"),
-                close=_to_float(item, "clos"),
-                volume=_to_float(item, "tvol"),
+                trading_date=_parse_date(_to_str(item, "xymd", "stck_bsop_date")),
+                open=_to_float(item, "open", "ovrs_nmix_oprc"),
+                high=_to_float(item, "high", "hprc", "ovrs_nmix_hgpr"),
+                low=_to_float(item, "low", "lprc", "ovrs_nmix_lwpr"),
+                close=_to_float(item, "clos", "close", "last", "ovrs_nmix_prpr"),
+                volume=_to_float(item, "tvol", "evol", "acml_vol"),
             )
-            for item in payload.get("output2", [])[:120]
+            for item in rows[:120]
         ]
 
 
@@ -260,6 +261,24 @@ def _to_float(payload: dict[str, Any], *keys: str) -> float:
             return float(str(raw).replace(",", ""))
     available = ", ".join(sorted(payload.keys()))
     raise KeyError(f"missing numeric field: {keys}; available fields: {available}")
+
+
+def _to_str(payload: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        raw = payload.get(key)
+        if raw not in {None, ""}:
+            return str(raw)
+    available = ", ".join(sorted(payload.keys()))
+    raise KeyError(f"missing text field: {keys}; available fields: {available}")
+
+
+def _payload_rows(payload: dict[str, Any], *keys: str) -> list[dict[str, Any]]:
+    for key in keys:
+        rows = payload.get(key)
+        if isinstance(rows, list) and rows:
+            return rows
+    available = ", ".join(sorted(payload.keys()))
+    raise RuntimeError(f"KIS daily rows are empty; available payload fields: {available}")
 
 
 def _quote_from_candles(candles: list[Candle]) -> dict[str, float]:

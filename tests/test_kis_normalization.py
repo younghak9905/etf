@@ -11,7 +11,7 @@ sys.modules.setdefault(
 
 from datetime import date
 
-from app.clients.kis import _quote_from_candles, _to_float
+from app.clients.kis import _payload_rows, _quote_from_candles, _to_float, _to_str
 from app.models.market import Candle
 
 
@@ -36,3 +36,9 @@ class KISNormalizationTest(TestCase):
         self.assertEqual(quote["day_high"], 12)
         self.assertEqual(quote["day_low"], 10)
         self.assertEqual(quote["volume"], 200)
+
+    def test_payload_rows_accepts_output_alias(self) -> None:
+        self.assertEqual(_payload_rows({"output": [{"xymd": "20260508"}]}, "output2", "output"), [{"xymd": "20260508"}])
+
+    def test_to_str_uses_first_available_alias(self) -> None:
+        self.assertEqual(_to_str({"stck_bsop_date": "20260508"}, "xymd", "stck_bsop_date"), "20260508")

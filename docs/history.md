@@ -18,3 +18,4 @@
 - Documented that Firestore uses the Cloud Run service account and default project database through `google.cloud.firestore.AsyncClient()`.
 - Added a per-client token acquisition lock and overseas quote fallback to the latest daily candle when KIS returns empty `last`/`base` values.
 - Added Firestore configuration and connectivity status to the `/` smoke-test page.
+- Made KIS overseas daily parsing accept `output` as well as `output2` and report payload keys when daily rows are empty.
