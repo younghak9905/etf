@@ -54,6 +54,7 @@ class MarketSnapshot:
     volume: float
     candles: list[Candle]
     observed_at: datetime
+    quote_source: str = "quote"
 
 
 @dataclass(frozen=True)

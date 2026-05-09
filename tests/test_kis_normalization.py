@@ -43,6 +43,14 @@ class KISNormalizationTest(TestCase):
         self.assertEqual(quote["day_low"], 10)
         self.assertEqual(quote["volume"], 200)
 
+    def test_quote_from_candles_can_use_intraday_price_without_daily_rows(self) -> None:
+        quote = _quote_from_candles([], current_price=88.5)
+
+        self.assertEqual(quote["current_price"], 88.5)
+        self.assertEqual(quote["day_high"], 88.5)
+        self.assertEqual(quote["day_low"], 88.5)
+        self.assertEqual(quote["volume"], 0.0)
+
     def test_payload_rows_accepts_output_alias(self) -> None:
         self.assertEqual(_payload_rows({"output": [{"xymd": "20260508"}]}, "output2", "output"), [{"xymd": "20260508"}])
 

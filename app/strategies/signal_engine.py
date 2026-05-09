@@ -26,15 +26,25 @@ class SignalEngine:
         market_state = self.classify_market_state(snapshot, ma20, ma60)
 
         metrics: dict[str, float | str] = {
+            "current_price": round(snapshot.current_price, 4),
             "ma20": round(ma20, 4) if ma20 is not None else "NA",
             "ma60": round(ma60, 4) if ma60 is not None else "NA",
             "rsi": round(current_rsi, 2) if current_rsi is not None else "NA",
             "volume_ma": round(volume_ma, 2) if volume_ma is not None else "NA",
+            "volume": round(snapshot.volume, 2),
+            "volume_ratio": _ratio(snapshot.volume, volume_ma),
             "week_low": round(week_low, 4),
+            "week_low_gap_pct": _pct_gap(snapshot.current_price, week_low),
             "range_low": round(range_low, 4),
+            "range_low_gap_pct": _pct_gap(snapshot.current_price, range_low),
             "day_high": snapshot.day_high,
             "day_low": snapshot.day_low,
             "prev_close": snapshot.prev_close,
+            "prev_close_change_pct": _pct_change(
+                snapshot.current_price, snapshot.prev_close
+            ),
+            "ma20_gap_pct": _pct_gap(snapshot.current_price, ma20),
+            "quote_source": snapshot.quote_source,
         }
 
         signals: list[Signal] = []
@@ -130,3 +140,21 @@ class SignalEngine:
         if ma20 < ma60:
             return MarketState.DOWNTREND
         return MarketState.SIDEWAYS
+
+
+def _pct_change(value: float, base: float | None) -> float | str:
+    if base in {None, 0}:
+        return "NA"
+    return round(((value - base) / base) * 100, 2)
+
+
+def _pct_gap(value: float, base: float | None) -> float | str:
+    if base in {None, 0}:
+        return "NA"
+    return round(((value / base) - 1) * 100, 2)
+
+
+def _ratio(value: float, base: float | None) -> float | str:
+    if base in {None, 0}:
+        return "NA"
+    return round(value / base, 2)

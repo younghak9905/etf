@@ -43,14 +43,9 @@ class KISClient:
             )
         else:
             candles = await self._overseas_daily(instrument.exchange, instrument.kis_code)
-            try:
-                quote = await self._overseas_quote(instrument.exchange, instrument.kis_code)
-            except KeyError as exc:
-                logger.warning(
-                    "kis_overseas_quote_fallback_to_daily",
-                    extra={"symbol": instrument.symbol, "error": str(exc)},
-                )
-                quote = _quote_from_candles(candles)
+            quote = await self._overseas_quote(
+                instrument.exchange, instrument.kis_code, candles
+            )
 
         return MarketSnapshot(
             instrument=instrument,
@@ -61,6 +56,7 @@ class KISClient:
             volume=quote["volume"],
             candles=candles,
             observed_at=datetime.now(UTC),
+            quote_source=str(quote.get("quote_source", "quote")),
         )
 
     async def _request(
@@ -208,7 +204,9 @@ class KISClient:
             for item in payload.get("output2", [])[:120]
         ]
 
-    async def _overseas_quote(self, exchange: str, symbol: str) -> dict[str, float]:
+    async def _overseas_quote(
+        self, exchange: str, symbol: str, candles: list[Candle]
+    ) -> dict[str, float | str]:
         payload = await self._request(
             "GET",
             "/uapi/overseas-price/v1/quotations/price",
@@ -216,14 +214,38 @@ class KISClient:
             params={"AUTH": "", "EXCD": exchange, "SYMB": symbol},
         )
         output = payload["output"]
+        current_price = _to_float(
+            output, "last", "base", "clos", "close", "ovrs_nmix_prpr", "stck_prpr"
+        )
+        prev_close = _to_float_or_none(output, "base", "clos", "close", "last")
+        day_high = _to_float_or_none(output, "high", "hprc", "ovrs_nmix_hgpr")
+        day_low = _to_float_or_none(output, "low", "lprc", "ovrs_nmix_lwpr")
+        volume = _to_float_or_none(output, "tvol", "evol")
+        quote_source = "intraday_quote"
+
+        if prev_close is None or day_high is None or day_low is None or volume is None:
+            fallback = _quote_from_candles(candles, current_price=current_price)
+            prev_close = prev_close if prev_close is not None else fallback["prev_close"]
+            day_high = day_high if day_high is not None else fallback["day_high"]
+            day_low = day_low if day_low is not None else fallback["day_low"]
+            volume = volume if volume is not None else fallback["volume"]
+            quote_source = "intraday_quote_with_daily_fallback"
+            logger.info(
+                "kis_overseas_quote_corrected",
+                extra={
+                    "symbol": symbol,
+                    "missing_fields": _missing_quote_fields(output),
+                    "quote_source": quote_source,
+                },
+            )
+
         return {
-            "current_price": _to_float(
-                output, "last", "base", "clos", "close", "ovrs_nmix_prpr", "stck_prpr"
-            ),
-            "prev_close": _to_float(output, "base", "clos", "close", "last"),
-            "day_high": _to_float(output, "high", "hprc", "ovrs_nmix_hgpr"),
-            "day_low": _to_float(output, "low", "lprc", "ovrs_nmix_lwpr"),
-            "volume": _to_float(output, "tvol", "evol"),
+            "current_price": current_price,
+            "prev_close": prev_close,
+            "day_high": day_high,
+            "day_low": day_low,
+            "volume": volume,
+            "quote_source": quote_source,
         }
 
     async def _overseas_daily(self, exchange: str, symbol: str) -> list[Candle]:
@@ -240,7 +262,14 @@ class KISClient:
                 "MODP": "1",
             },
         )
-        rows = _payload_rows(payload, "output2", "output")
+        try:
+            rows = _payload_rows(payload, "output2", "output")
+        except RuntimeError as exc:
+            logger.warning(
+                "kis_overseas_daily_empty",
+                extra={"symbol": symbol, "error": str(exc)},
+            )
+            return []
         return [
             Candle(
                 trading_date=_parse_date(_to_str(item, "xymd", "stck_bsop_date")),
@@ -261,6 +290,13 @@ def _to_float(payload: dict[str, Any], *keys: str) -> float:
             return float(str(raw).replace(",", ""))
     available = ", ".join(sorted(payload.keys()))
     raise KeyError(f"missing numeric field: {keys}; available fields: {available}")
+
+
+def _to_float_or_none(payload: dict[str, Any], *keys: str) -> float | None:
+    try:
+        return _to_float(payload, *keys)
+    except KeyError:
+        return None
 
 
 def _to_str(payload: dict[str, Any], *keys: str) -> str:
@@ -295,14 +331,36 @@ def _payload_summary(payload: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
-def _quote_from_candles(candles: list[Candle]) -> dict[str, float]:
+def _missing_quote_fields(payload: dict[str, Any]) -> str:
+    missing: list[str] = []
+    if _to_float_or_none(payload, "base", "clos", "close", "last") is None:
+        missing.append("prev_close")
+    if _to_float_or_none(payload, "high", "hprc", "ovrs_nmix_hgpr") is None:
+        missing.append("day_high")
+    if _to_float_or_none(payload, "low", "lprc", "ovrs_nmix_lwpr") is None:
+        missing.append("day_low")
+    if _to_float_or_none(payload, "tvol", "evol") is None:
+        missing.append("volume")
+    return ",".join(missing)
+
+
+def _quote_from_candles(
+    candles: list[Candle], *, current_price: float | None = None
+) -> dict[str, float]:
     if not candles:
-        raise RuntimeError("cannot build quote fallback without overseas candles")
+        price = current_price or 0.0
+        return {
+            "current_price": price,
+            "prev_close": price,
+            "day_high": price,
+            "day_low": price,
+            "volume": 0.0,
+        }
     ordered = sorted(candles, key=lambda candle: candle.trading_date)
     latest = ordered[-1]
     previous = ordered[-2] if len(ordered) >= 2 else latest
     return {
-        "current_price": latest.close,
+        "current_price": current_price if current_price is not None else latest.close,
         "prev_close": previous.close,
         "day_high": latest.high,
         "day_low": latest.low,

@@ -55,10 +55,16 @@ class DiscordNotifier:
             f"종목: `{signal.instrument.symbol}`\n"
             f"시장상태: `{signal.market_state.value}`\n"
             f"현재가: `{signal.current_price}`\n"
+            f"전일대비: `{_fmt_pct(metrics.get('prev_close_change_pct'))}`\n"
             f"MA20: `{metrics.get('ma20')}`\n"
             f"MA60: `{metrics.get('ma60')}`\n"
+            f"MA20 괴리율: `{_fmt_pct(metrics.get('ma20_gap_pct'))}`\n"
             f"RSI: `{metrics.get('rsi')}`\n"
             f"주간저점: `{metrics.get('week_low')}`\n\n"
+            f"주간저점 대비: `{_fmt_pct(metrics.get('week_low_gap_pct'))}`\n"
+            f"박스하단 대비: `{_fmt_pct(metrics.get('range_low_gap_pct'))}`\n"
+            f"거래량/평균: `{_fmt_ratio(metrics.get('volume_ratio'))}`\n"
+            f"가격 데이터: `{metrics.get('quote_source', 'quote')}`\n\n"
             f"조건:\n{reason_text}\n\n"
             "적립식 분할매수 후보 구간입니다. 자동매매 신호가 아닌 참고 알림입니다."
         )
@@ -66,3 +72,15 @@ class DiscordNotifier:
             "username": "ETF Pullback Alert",
             "content": content[:2000],
         }
+
+
+def _fmt_pct(value: object) -> str:
+    if isinstance(value, (float, int)):
+        return f"{value:+.2f}%"
+    return "NA"
+
+
+def _fmt_ratio(value: object) -> str:
+    if isinstance(value, (float, int)):
+        return f"{value:.2f}x"
+    return "NA"

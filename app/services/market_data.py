@@ -50,6 +50,7 @@ class MockMarketDataService(MarketDataService):
             volume=700_000,
             candles=candles,
             observed_at=datetime.now(UTC),
+            quote_source="mock",
         )
 
 

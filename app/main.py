@@ -262,6 +262,7 @@ async def run_alert_cycle(
     engine: SignalEngine = Depends(get_engine),
     notifier: DiscordNotifier = Depends(get_notifier),
 ) -> dict[str, Any]:
+    started_at = datetime.now(UTC)
     _authorize(settings, x_scheduler_token, token)
     settings.validate_runtime()
 
@@ -279,17 +280,33 @@ async def run_alert_cycle(
     ]
 
     if not active:
+        duration_ms = _duration_ms(started_at)
+        logger.info(
+            "run_cycle_completed",
+            extra={
+                "status": "skipped",
+                "reason": "outside_market_windows",
+                "active_count": 0,
+                "sent_count": 0,
+                "suppressed_count": 0,
+                "error_count": 0,
+                "signal_count": 0,
+                "duration_ms": duration_ms,
+            },
+        )
         logger.info("no_active_market_window")
         return {"status": "skipped", "reason": "outside_market_windows", "signals": []}
 
     sent: list[Signal] = []
     suppressed: list[Signal] = []
     errors: list[dict[str, str]] = []
+    signal_count = 0
 
     for instrument in active:
         try:
             snapshot = await market_data.get_snapshot(instrument)
             signals = engine.evaluate(snapshot)
+            signal_count += len(signals)
             for signal in signals:
                 if await storage.should_send(signal, settings.duplicate_window_minutes):
                     await notifier.send(signal)
@@ -297,19 +314,54 @@ async def run_alert_cycle(
                     sent.append(signal)
                 else:
                     suppressed.append(signal)
+            logger.info(
+                "instrument_cycle_completed",
+                extra={
+                    "symbol": instrument.symbol,
+                    "market": instrument.market.value,
+                    "signal_count": len(signals),
+                    "sent_count": len(
+                        [signal for signal in sent if signal.instrument == instrument]
+                    ),
+                    "suppressed_count": len(
+                        [
+                            signal
+                            for signal in suppressed
+                            if signal.instrument == instrument
+                        ]
+                    ),
+                    "quote_source": snapshot.quote_source,
+                    "current_price": snapshot.current_price,
+                },
+            )
         except Exception as exc:
             logger.exception(
                 "instrument_cycle_failed", extra={"symbol": instrument.symbol}
             )
             errors.append({"symbol": instrument.symbol, "error": str(exc)})
 
-    return {
-        "status": "ok" if not errors else "partial_error",
+    status = "ok" if not errors else "partial_error"
+    response = {
+        "status": status,
         "active_symbols": [instrument.symbol for instrument in active],
         "sent": [_serialize_signal(signal) for signal in sent],
         "suppressed": [_serialize_signal(signal) for signal in suppressed],
         "errors": errors,
     }
+    logger.info(
+        "run_cycle_completed",
+        extra={
+            "status": status,
+            "active_symbols": [instrument.symbol for instrument in active],
+            "active_count": len(active),
+            "signal_count": signal_count,
+            "sent_count": len(sent),
+            "suppressed_count": len(suppressed),
+            "error_count": len(errors),
+            "duration_ms": _duration_ms(started_at),
+        },
+    )
+    return response
 
 
 @app.post("/test-notification")
@@ -347,6 +399,10 @@ def _serialize_signal(signal: Signal) -> dict[str, Any]:
         "metrics": signal.metrics,
         "observed_at": signal.observed_at.isoformat(),
     }
+
+
+def _duration_ms(started_at: datetime) -> int:
+    return int((datetime.now(UTC) - started_at).total_seconds() * 1000)
 
 
 if __name__ == "__main__":

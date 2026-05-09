@@ -26,6 +26,12 @@ Cloud Scheduler는 1분마다 하나의 `/run` 엔드포인트만 호출합니�
 
 Market state is classified as `CRASH`, `SIDEWAYS`, `UPTREND`, `DOWNTREND`, or `UNKNOWN`.
 
+Discord signal messages include previous-close change, MA20 gap, weekly-low gap,
+range-low gap, volume ratio, and the KIS quote source used for the calculation.
+Each `/run` also emits structured `instrument_cycle_completed` and
+`run_cycle_completed` logs with active symbol, signal, sent, suppressed, error,
+and duration counts.
+
 ## Environment
 
 Copy `.env.example` and set secrets:
