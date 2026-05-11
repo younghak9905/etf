@@ -72,6 +72,7 @@ def _settings(*, alert_dry_run: bool) -> Settings:
         storage_backend="sqlite",
         sqlite_path=Path(":memory:"),
         firestore_collection="etf_signal_notifications",
+        run_state_collection="etf_run_state",
         us_watch_windows="17:00-00:00",
         kr_watch_windows="09:00-10:00,11:30-13:00",
         alert_dry_run=alert_dry_run,

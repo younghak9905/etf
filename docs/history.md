@@ -25,3 +25,4 @@
 - Added `POST /test-notification` to send a Discord webhook test message using the existing scheduler token authentication.
 - Added SOXX as a watched US ETF using KIS exchange code `NAS`.
 - Improved Discord signal messages with change, gap, volume ratio, and quote-source details; corrected overseas intraday quote fallback to preserve live price fields; added structured per-instrument and per-run summary logs.
+- Added latest `/run` summary persistence with `/last-run` JSON output and root-page display of active symbols, signal counts, sent/suppressed counts, errors, and no-alert reason.

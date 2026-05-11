@@ -32,6 +32,7 @@ class Settings:
     storage_backend: str
     sqlite_path: Path
     firestore_collection: str
+    run_state_collection: str
     us_watch_windows: str
     kr_watch_windows: str
     alert_dry_run: bool
@@ -98,6 +99,7 @@ class Settings:
             firestore_collection=os.getenv(
                 "FIRESTORE_COLLECTION", "etf_signal_notifications"
             ),
+            run_state_collection=os.getenv("RUN_STATE_COLLECTION", "etf_run_state"),
             us_watch_windows=os.getenv("US_WATCH_WINDOWS", "17:00-00:00"),
             kr_watch_windows=os.getenv("KR_WATCH_WINDOWS", "09:00-10:00,11:30-13:00"),
             alert_dry_run=_bool_env("ALERT_DRY_RUN", False),

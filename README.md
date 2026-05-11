@@ -78,6 +78,8 @@ http://localhost:8080/
 ```
 
 The root page also shows whether Firestore is configured and whether a short Firestore read check succeeds.
+It also displays the latest `/run` summary, including active symbols, signal
+count, sent count, suppressed count, errors, and the reason no alert was sent.
 
 Health check:
 
@@ -101,6 +103,12 @@ Test Discord webhook delivery without waiting for a signal:
 
 ```powershell
 Invoke-RestMethod -Method Post "http://localhost:8080/test-notification" -Headers @{"X-Scheduler-Token"="change-me"}
+```
+
+Read the latest run summary as JSON:
+
+```powershell
+Invoke-RestMethod -Method Get "http://localhost:8080/last-run"
 ```
 
 ## Docker

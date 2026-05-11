@@ -107,8 +107,13 @@ def get_notifier(request: Request) -> DiscordNotifier:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root(settings: Settings = Depends(get_settings)) -> str:
+async def root(
+    settings: Settings = Depends(get_settings),
+    storage: AlertStorage = Depends(get_storage),
+) -> str:
     firestore_status = await _firestore_status(settings)
+    last_run = await _safe_last_run_summary(storage)
+    last_run_html = _last_run_html(last_run)
     return f"""
     <!doctype html>
     <html lang="en">
@@ -145,6 +150,13 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
           p {{
             margin: 8px 0;
             line-height: 1.5;
+          }}
+          ul {{
+            margin: 8px 0 0 20px;
+            padding: 0;
+          }}
+          li {{
+            margin: 4px 0;
           }}
           code {{
             background: #eef1f5;
@@ -217,6 +229,8 @@ async def root(settings: Settings = Depends(get_settings)) -> str:
           <p>Health endpoint: <a href="/health">/health</a></p>
           <p>Scheduler endpoint: <code>POST /run</code></p>
           <p>Discord test endpoint: <code>POST /test-notification</code></p>
+          <h2>Last Run</h2>
+          {last_run_html}
         </main>
       </body>
     </html>
@@ -252,6 +266,12 @@ async def _firestore_status(settings: Settings) -> str:
         return f"error: {type(exc).__name__}: {str(exc)[:160]}"
 
 
+@app.get("/last-run")
+async def last_run(storage: AlertStorage = Depends(get_storage)) -> dict[str, Any]:
+    summary = await storage.get_last_run_summary()
+    return {"status": "ok", "last_run": summary}
+
+
 @app.post("/run")
 async def run_alert_cycle(
     x_scheduler_token: str | None = Header(default=None),
@@ -281,19 +301,20 @@ async def run_alert_cycle(
 
     if not active:
         duration_ms = _duration_ms(started_at)
-        logger.info(
-            "run_cycle_completed",
-            extra={
-                "status": "skipped",
-                "reason": "outside_market_windows",
-                "active_count": 0,
-                "sent_count": 0,
-                "suppressed_count": 0,
-                "error_count": 0,
-                "signal_count": 0,
-                "duration_ms": duration_ms,
-            },
+        summary = _run_summary(
+            status="skipped",
+            started_at=started_at,
+            active=[],
+            sent=[],
+            suppressed=[],
+            errors=[],
+            signal_count=0,
+            duration_ms=duration_ms,
+            reason="outside_market_windows",
+            no_alert_reason="outside_market_windows",
         )
+        await _record_run_summary(storage, summary)
+        logger.info("run_cycle_completed", extra=summary)
         logger.info("no_active_market_window")
         return {"status": "skipped", "reason": "outside_market_windows", "signals": []}
 
@@ -341,26 +362,34 @@ async def run_alert_cycle(
             errors.append({"symbol": instrument.symbol, "error": str(exc)})
 
     status = "ok" if not errors else "partial_error"
+    no_alert_reason = _no_alert_reason(
+        active=active,
+        signal_count=signal_count,
+        sent_count=len(sent),
+        suppressed_count=len(suppressed),
+        errors=errors,
+    )
     response = {
         "status": status,
         "active_symbols": [instrument.symbol for instrument in active],
         "sent": [_serialize_signal(signal) for signal in sent],
         "suppressed": [_serialize_signal(signal) for signal in suppressed],
         "errors": errors,
+        "no_alert_reason": no_alert_reason,
     }
-    logger.info(
-        "run_cycle_completed",
-        extra={
-            "status": status,
-            "active_symbols": [instrument.symbol for instrument in active],
-            "active_count": len(active),
-            "signal_count": signal_count,
-            "sent_count": len(sent),
-            "suppressed_count": len(suppressed),
-            "error_count": len(errors),
-            "duration_ms": _duration_ms(started_at),
-        },
+    summary = _run_summary(
+        status=status,
+        started_at=started_at,
+        active=active,
+        sent=sent,
+        suppressed=suppressed,
+        errors=errors,
+        signal_count=signal_count,
+        duration_ms=_duration_ms(started_at),
+        no_alert_reason=no_alert_reason,
     )
+    await _record_run_summary(storage, summary)
+    logger.info("run_cycle_completed", extra=summary)
     return response
 
 
@@ -403,6 +432,95 @@ def _serialize_signal(signal: Signal) -> dict[str, Any]:
 
 def _duration_ms(started_at: datetime) -> int:
     return int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+
+
+async def _record_run_summary(storage: AlertStorage, summary: dict[str, Any]) -> None:
+    try:
+        await storage.record_run_summary(summary)
+    except Exception as exc:
+        logger.warning("run_summary_record_failed", extra={"error": str(exc)})
+
+
+async def _safe_last_run_summary(storage: AlertStorage) -> dict[str, Any] | None:
+    try:
+        return await storage.get_last_run_summary()
+    except Exception as exc:
+        return {"status": "error", "no_alert_reason": f"last_run_read_failed: {exc}"}
+
+
+def _run_summary(
+    *,
+    status: str,
+    started_at: datetime,
+    active: list,
+    sent: list[Signal],
+    suppressed: list[Signal],
+    errors: list[dict[str, str]],
+    signal_count: int,
+    duration_ms: int,
+    reason: str | None = None,
+    no_alert_reason: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "reason": reason,
+        "no_alert_reason": no_alert_reason,
+        "started_at": started_at.isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
+        "active_symbols": [instrument.symbol for instrument in active],
+        "active_count": len(active),
+        "signal_count": signal_count,
+        "sent_count": len(sent),
+        "suppressed_count": len(suppressed),
+        "error_count": len(errors),
+        "duration_ms": duration_ms,
+        "sent_signals": [signal.key for signal in sent],
+        "suppressed_signals": [signal.key for signal in suppressed],
+        "errors": errors,
+    }
+
+
+def _no_alert_reason(
+    *,
+    active: list,
+    signal_count: int,
+    sent_count: int,
+    suppressed_count: int,
+    errors: list[dict[str, str]],
+) -> str | None:
+    if not active:
+        return "outside_market_windows"
+    if errors and signal_count == 0:
+        return "all_active_symbols_failed"
+    if sent_count > 0:
+        return None
+    if signal_count == 0:
+        return "no_signal_conditions_met"
+    if suppressed_count > 0:
+        return "duplicate_alert_suppressed"
+    return "no_alert_sent"
+
+
+def _last_run_html(summary: dict[str, Any] | None) -> str:
+    if not summary:
+        return "<p>No run has been recorded yet.</p>"
+
+    rows = [
+        ("Status", summary.get("status")),
+        ("Completed", summary.get("completed_at") or summary.get("updated_at")),
+        ("Active symbols", ", ".join(summary.get("active_symbols") or [])),
+        ("Signals", summary.get("signal_count")),
+        ("Sent", summary.get("sent_count")),
+        ("Suppressed", summary.get("suppressed_count")),
+        ("Errors", summary.get("error_count")),
+        ("No alert reason", summary.get("no_alert_reason")),
+        ("Duration", f"{summary.get('duration_ms')} ms"),
+    ]
+    items = "\n".join(
+        f"<li><strong>{html.escape(label)}:</strong> {html.escape(str(value if value is not None else ''))}</li>"
+        for label, value in rows
+    )
+    return f"<ul>{items}</ul>"
 
 
 if __name__ == "__main__":
