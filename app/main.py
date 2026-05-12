@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.config.settings import Settings
-from app.models.market import Signal
+from app.models.market import Instrument, MarketSnapshot, Signal
 from app.notification.discord import DiscordNotifier
 from app.scheduler.windows import is_market_window_open
 from app.services.market_data import MarketDataService, build_market_data_service
@@ -115,6 +115,11 @@ async def root(
     firestore_status = await _firestore_status(settings)
     last_run = await _safe_last_run_summary(storage)
     last_run_html = _last_run_html(last_run, settings.timezone)
+    market_snapshots_html = _market_snapshots_html(
+        settings.instruments,
+        last_run,
+        settings.timezone,
+    )
     return f"""
     <!doctype html>
     <html lang="en">
@@ -136,7 +141,7 @@ async def root(
             color: #171717;
           }}
           main {{
-            width: min(680px, calc(100% - 32px));
+            width: min(960px, calc(100% - 32px));
             border: 1px solid #d9dde3;
             border-radius: 8px;
             background: #ffffff;
@@ -188,6 +193,35 @@ async def root(
           a {{
             color: #155bd5;
           }}
+          .table-wrap {{
+            width: 100%;
+            overflow-x: auto;
+          }}
+          table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+          }}
+          th,
+          td {{
+            border-bottom: 1px solid #e3e7ee;
+            padding: 8px 10px;
+            text-align: right;
+            white-space: nowrap;
+          }}
+          th:first-child,
+          td:first-child,
+          th:nth-child(2),
+          td:nth-child(2),
+          th:last-child,
+          td:last-child {{
+            text-align: left;
+          }}
+          th {{
+            color: #5f6876;
+            font-weight: 700;
+          }}
           @media (prefers-color-scheme: dark) {{
             body {{
               background: #101214;
@@ -209,6 +243,10 @@ async def root(
             }}
             a {{
               color: #8ab4ff;
+            }}
+            th,
+            td {{
+              border-color: #30363d;
             }}
           }}
         </style>
@@ -232,6 +270,8 @@ async def root(
           <p>Discord test endpoint: <code>POST /test-notification</code></p>
           <h2>Last Run</h2>
           {last_run_html}
+          <h2>Market Snapshots</h2>
+          {market_snapshots_html}
         </main>
       </body>
     </html>
@@ -322,12 +362,14 @@ async def run_alert_cycle(
 
     sent: list[Signal] = []
     suppressed: list[Signal] = []
+    snapshots: list[MarketSnapshot] = []
     errors: list[dict[str, str]] = []
     signal_count = 0
 
     for instrument in active:
         try:
             snapshot = await market_data.get_snapshot(instrument)
+            snapshots.append(snapshot)
             signals = engine.evaluate(snapshot)
             signal_count += len(signals)
             for signal in signals:
@@ -376,6 +418,9 @@ async def run_alert_cycle(
         "active_symbols": [instrument.symbol for instrument in active],
         "sent": [_serialize_signal(signal) for signal in sent],
         "suppressed": [_serialize_signal(signal) for signal in suppressed],
+        "market_snapshots": [
+            _serialize_snapshot(snapshot, settings.timezone) for snapshot in snapshots
+        ],
         "errors": errors,
         "no_alert_reason": no_alert_reason,
     }
@@ -386,6 +431,7 @@ async def run_alert_cycle(
         active=active,
         sent=sent,
         suppressed=suppressed,
+        snapshots=snapshots,
         errors=errors,
         signal_count=signal_count,
         duration_ms=_duration_ms(started_at),
@@ -433,6 +479,23 @@ def _serialize_signal(signal: Signal) -> dict[str, Any]:
     }
 
 
+def _serialize_snapshot(snapshot: MarketSnapshot, timezone_name: str) -> dict[str, Any]:
+    return {
+        "symbol": snapshot.instrument.symbol,
+        "name": snapshot.instrument.name,
+        "market": snapshot.instrument.market.value,
+        "exchange": snapshot.instrument.exchange,
+        "current_price": snapshot.current_price,
+        "prev_close": snapshot.prev_close,
+        "day_high": snapshot.day_high,
+        "day_low": snapshot.day_low,
+        "volume": snapshot.volume,
+        "quote_source": snapshot.quote_source,
+        "observed_at": snapshot.observed_at.isoformat(),
+        "observed_at_local": to_local_iso(snapshot.observed_at, timezone_name),
+    }
+
+
 def _duration_ms(started_at: datetime) -> int:
     return int((datetime.now(UTC) - started_at).total_seconds() * 1000)
 
@@ -462,6 +525,7 @@ def _run_summary(
     errors: list[dict[str, str]],
     signal_count: int,
     duration_ms: int,
+    snapshots: list[MarketSnapshot] | None = None,
     reason: str | None = None,
     no_alert_reason: str | None = None,
 ) -> dict[str, Any]:
@@ -484,6 +548,9 @@ def _run_summary(
         "duration_ms": duration_ms,
         "sent_signals": [signal.key for signal in sent],
         "suppressed_signals": [signal.key for signal in suppressed],
+        "market_snapshots": [
+            _serialize_snapshot(snapshot, timezone_name) for snapshot in snapshots or []
+        ],
         "errors": errors,
     }
 
@@ -539,6 +606,84 @@ def _last_run_html(summary: dict[str, Any] | None, timezone_name: str) -> str:
         for label, value in rows
     )
     return f"<ul>{items}</ul>"
+
+
+def _market_snapshots_html(
+    instruments: list[Instrument],
+    summary: dict[str, Any] | None,
+    timezone_name: str,
+) -> str:
+    snapshots = {
+        str(snapshot.get("symbol")): snapshot
+        for snapshot in ((summary or {}).get("market_snapshots") or [])
+        if isinstance(snapshot, dict)
+    }
+    rows = []
+    for instrument in instruments:
+        snapshot = snapshots.get(instrument.symbol)
+        if snapshot:
+            observed_at = snapshot.get("observed_at_local")
+            if not observed_at and snapshot.get("observed_at"):
+                try:
+                    observed_at = to_local_iso(snapshot["observed_at"], timezone_name)
+                except (TypeError, ValueError):
+                    observed_at = snapshot.get("observed_at")
+            cells = [
+                instrument.symbol,
+                instrument.name,
+                snapshot.get("current_price"),
+                snapshot.get("day_high"),
+                snapshot.get("day_low"),
+                snapshot.get("prev_close"),
+                _format_number(snapshot.get("volume"), digits=0),
+                observed_at,
+                snapshot.get("quote_source"),
+            ]
+        else:
+            cells = [
+                instrument.symbol,
+                instrument.name,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "not checked in last run",
+            ]
+        row = "".join(
+            f"<td>{html.escape(str(value if value is not None else ''))}</td>"
+            for value in cells
+        )
+        rows.append(f"<tr>{row}</tr>")
+
+    body = "\n".join(rows)
+    return f"""
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Current</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Prev close</th>
+            <th>Volume</th>
+            <th>Observed</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>{body}</tbody>
+      </table>
+    </div>
+    """
+
+
+def _format_number(value: object, *, digits: int = 2) -> str:
+    if isinstance(value, (float, int)):
+        return f"{value:,.{digits}f}"
+    return str(value if value is not None else "")
 
 
 if __name__ == "__main__":
