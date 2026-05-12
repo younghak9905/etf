@@ -7,6 +7,7 @@ import httpx
 
 from app.config.settings import Settings
 from app.models.market import Signal
+from app.utils.time import to_local_iso
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class DiscordNotifier:
         self._webhook_url = settings.discord_webhook_url
         self._dry_run = settings.alert_dry_run
         self._timeout = settings.request_timeout_seconds
+        self._timezone = settings.timezone
 
     async def send(self, signal: Signal) -> None:
         payload = self._payload(signal)
@@ -27,7 +29,8 @@ class DiscordNotifier:
             "content": (
                 "**ETF Pullback Alert test notification**\n\n"
                 f"Status: `ok`\n"
-                f"Time: `{datetime.now(UTC).isoformat()}`\n\n"
+                f"Time: `{to_local_iso(datetime.now(UTC), self._timezone)}`\n"
+                f"Timezone: `{self._timezone}`\n\n"
                 "Discord webhook delivery is working."
             ),
         }
@@ -46,13 +49,13 @@ class DiscordNotifier:
             response.raise_for_status()
         return "sent"
 
-    @staticmethod
-    def _payload(signal: Signal) -> dict[str, object]:
+    def _payload(self, signal: Signal) -> dict[str, object]:
         metrics = signal.metrics
         reason_text = "\n".join(f"- {reason}" for reason in signal.reasons)
         content = (
             f"**[{signal.instrument.name} {signal.signal_type.value}]**\n\n"
             f"종목: `{signal.instrument.symbol}`\n"
+            f"관측시각: `{to_local_iso(signal.observed_at, self._timezone)}`\n"
             f"시장상태: `{signal.market_state.value}`\n"
             f"현재가: `{signal.current_price}`\n"
             f"전일대비: `{_fmt_pct(metrics.get('prev_close_change_pct'))}`\n"
@@ -60,7 +63,7 @@ class DiscordNotifier:
             f"MA60: `{metrics.get('ma60')}`\n"
             f"MA20 괴리율: `{_fmt_pct(metrics.get('ma20_gap_pct'))}`\n"
             f"RSI: `{metrics.get('rsi')}`\n"
-            f"주간저점: `{metrics.get('week_low')}`\n\n"
+            f"주간저점: `{metrics.get('week_low')}`\n"
             f"주간저점 대비: `{_fmt_pct(metrics.get('week_low_gap_pct'))}`\n"
             f"박스하단 대비: `{_fmt_pct(metrics.get('range_low_gap_pct'))}`\n"
             f"거래량/평균: `{_fmt_ratio(metrics.get('volume_ratio'))}`\n"

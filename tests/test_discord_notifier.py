@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 import sys
 import types
-from pathlib import Path
-from datetime import UTC, datetime
 from unittest import IsolatedAsyncioTestCase
 
 sys.modules.setdefault(
@@ -30,7 +30,7 @@ class DiscordNotifierTest(IsolatedAsyncioTestCase):
             signal_type=SignalType.BUY_CANDIDATE,
             market_state=MarketState.UPTREND,
             current_price=100.0,
-            reasons=["주간 저점 근접"],
+            reasons=["weekly low proximity"],
             metrics={
                 "ma20": 99.0,
                 "ma60": 92.0,
@@ -43,12 +43,13 @@ class DiscordNotifierTest(IsolatedAsyncioTestCase):
                 "volume_ratio": 0.82,
                 "quote_source": "intraday_quote_with_daily_fallback",
             },
-            observed_at=datetime.now(UTC),
+            observed_at=datetime(2026, 5, 12, 11, 16, tzinfo=UTC),
         )
 
-        payload = DiscordNotifier._payload(signal)
+        payload = DiscordNotifier(_settings(alert_dry_run=True))._payload(signal)
 
         self.assertIn("전일대비", payload["content"])
+        self.assertIn("2026-05-12T20:16:00+09:00", payload["content"])
         self.assertIn("-1.25%", payload["content"])
         self.assertIn("0.82x", payload["content"])
         self.assertIn("intraday_quote_with_daily_fallback", payload["content"])

@@ -19,6 +19,7 @@ from app.scheduler.windows import is_market_window_open
 from app.services.market_data import MarketDataService, build_market_data_service
 from app.services.storage import AlertStorage, build_alert_storage
 from app.strategies.signal_engine import SignalEngine
+from app.utils.time import to_local_iso
 
 
 class JsonFormatter(logging.Formatter):
@@ -113,7 +114,7 @@ async def root(
 ) -> str:
     firestore_status = await _firestore_status(settings)
     last_run = await _safe_last_run_summary(storage)
-    last_run_html = _last_run_html(last_run)
+    last_run_html = _last_run_html(last_run, settings.timezone)
     return f"""
     <!doctype html>
     <html lang="en">
@@ -304,6 +305,7 @@ async def run_alert_cycle(
         summary = _run_summary(
             status="skipped",
             started_at=started_at,
+            timezone_name=settings.timezone,
             active=[],
             sent=[],
             suppressed=[],
@@ -380,6 +382,7 @@ async def run_alert_cycle(
     summary = _run_summary(
         status=status,
         started_at=started_at,
+        timezone_name=settings.timezone,
         active=active,
         sent=sent,
         suppressed=suppressed,
@@ -452,6 +455,7 @@ def _run_summary(
     *,
     status: str,
     started_at: datetime,
+    timezone_name: str,
     active: list,
     sent: list[Signal],
     suppressed: list[Signal],
@@ -461,12 +465,16 @@ def _run_summary(
     reason: str | None = None,
     no_alert_reason: str | None = None,
 ) -> dict[str, Any]:
+    completed_at = datetime.now(UTC)
     return {
         "status": status,
         "reason": reason,
         "no_alert_reason": no_alert_reason,
         "started_at": started_at.isoformat(),
-        "completed_at": datetime.now(UTC).isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "timezone": timezone_name,
+        "started_at_local": to_local_iso(started_at, timezone_name),
+        "completed_at_local": to_local_iso(completed_at, timezone_name),
         "active_symbols": [instrument.symbol for instrument in active],
         "active_count": len(active),
         "signal_count": signal_count,
@@ -501,13 +509,23 @@ def _no_alert_reason(
     return "no_alert_sent"
 
 
-def _last_run_html(summary: dict[str, Any] | None) -> str:
+def _last_run_html(summary: dict[str, Any] | None, timezone_name: str) -> str:
     if not summary:
         return "<p>No run has been recorded yet.</p>"
 
+    completed_at = summary.get("completed_at") or summary.get("updated_at")
+    completed_at_local = summary.get("completed_at_local")
+    if not completed_at_local and completed_at:
+        try:
+            completed_at_local = to_local_iso(completed_at, timezone_name)
+        except (TypeError, ValueError):
+            completed_at_local = completed_at
+
     rows = [
         ("Status", summary.get("status")),
-        ("Completed", summary.get("completed_at") or summary.get("updated_at")),
+        ("Completed (local)", completed_at_local),
+        ("Completed (UTC)", completed_at),
+        ("Timezone", summary.get("timezone") or timezone_name),
         ("Active symbols", ", ".join(summary.get("active_symbols") or [])),
         ("Signals", summary.get("signal_count")),
         ("Sent", summary.get("sent_count")),
